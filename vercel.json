@@ -1,4 +1,13 @@
 {
-  "outputDirectory": ".",
-  "cleanUrls": false
+  "version": 2,
+  "builds": [
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "style.css", "use": "@vercel/static" },
+    { "src": "script.js", "use": "@vercel/static" },
+    { "src": "words.js", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "^/$", "dest": "/index.html" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
 }
