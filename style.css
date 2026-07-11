@@ -1,0 +1,830 @@
+/* ============================================================
+   Word Fall — dark arcade theme
+   Words fall through the playfield; type them before they land.
+   ============================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-deep: #0b0714;
+  --bg-panel: #171028;
+  --border: #3a2a5e;
+  --text: #e8e2f7;
+  --text-dim: #8d81ad;
+  --accent: #ffd54a;
+  --correct: #5dff9d;
+  --wrong: #ff4d6d;
+  --player-green: #3ddc84;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: "Courier New", Consolas, monospace;
+  background: var(--bg-deep);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* Full-viewport game container; gets .shake when a word lands */
+.game {
+  position: relative;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse at 50% -20%, #2b1a4d 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 120%, #1a3324 0%, transparent 55%),
+    var(--bg-deep);
+}
+
+/* ============================================================
+   HUD
+   ============================================================ */
+
+.hud {
+  padding: 14px 28px;
+  z-index: 2;
+}
+
+/* Top bar: three stats in a row */
+.hud--top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.hud__stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+}
+
+.hud__stat--center { align-items: center; text-align: center; }
+.hud__stat--right  { align-items: flex-end; text-align: right; }
+
+.hud__stat-label {
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+}
+
+.hud__stat-value {
+  font-size: 26px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small all-time-best line under a HUD stat — highlighted in gold */
+.hud__stat-sub {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(255, 213, 74, 0.35);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Turns green while the current run is beating the old record */
+.hud__stat-sub--record {
+  color: var(--correct);
+  text-shadow: 0 0 10px rgba(93, 255, 157, 0.5);
+}
+
+/* Streak readout lights up while a streak is going (class set by JS) */
+.hud__stat--hot .hud__stat-value {
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(255, 213, 74, 0.6);
+}
+
+/* Quick pop each time the streak increases */
+.hud__stat--pop .hud__stat-value {
+  animation: stat-pop 0.25s ease-out;
+}
+
+@keyframes stat-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* Bottom HP labels */
+.hud__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 6px 2px;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+
+.hud__name { font-weight: bold; }
+
+.hud__hp {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Health bar
+   ============================================================ */
+
+.bar {
+  height: 26px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: #0d0a18;
+  overflow: hidden;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.6) inset;
+}
+
+.bar__fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 3px;
+  transition: width 0.35s ease-out;
+}
+
+.bar__fill--player {
+  background: linear-gradient(90deg, #1f9d5c, var(--player-green));
+  box-shadow: 0 0 14px rgba(61, 220, 132, 0.45);
+}
+
+/* ============================================================
+   Playfield & danger line
+   ============================================================ */
+
+.playfield {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Words landing on this line damage the player */
+.danger-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--wrong) 20%, var(--wrong) 80%, transparent);
+  box-shadow: 0 0 14px rgba(255, 77, 109, 0.7);
+}
+
+/* Brighter pulse right after a word lands */
+.danger-line--hit {
+  animation: danger-pulse 0.45s ease-out;
+}
+
+@keyframes danger-pulse {
+  0%   { box-shadow: 0 0 14px rgba(255, 77, 109, 0.7); height: 3px; }
+  30%  { box-shadow: 0 0 40px rgba(255, 77, 109, 1); height: 6px; }
+  100% { box-shadow: 0 0 14px rgba(255, 77, 109, 0.7); height: 3px; }
+}
+
+/* ============================================================
+   Falling words
+   ============================================================ */
+
+.falling-word {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Position driven by transform from JS (cheaper than top/left updates) */
+  will-change: transform;
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(23, 16, 40, 0.85);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* The word currently locked onto by the player's typing */
+.falling-word--target {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(255, 213, 74, 0.45);
+}
+
+/* Per-character coloring — spans generated by JS */
+.falling-word .char          { color: var(--text-dim); }
+.falling-word--target .char  { color: var(--text); }
+.falling-word .char--done    { color: var(--correct); }
+
+/* Brief red shudder on a wrong keystroke */
+.falling-word--error {
+  animation: word-error 0.25s ease-out;
+}
+
+@keyframes word-error {
+  0%   { box-shadow: 0 0 0 rgba(255, 77, 109, 0); }
+  30%  { box-shadow: 0 0 24px rgba(255, 77, 109, 0.9); border-color: var(--wrong); }
+  100% { box-shadow: 0 0 0 rgba(255, 77, 109, 0); }
+}
+
+/* Word typed successfully: flash and burst outward (then removed by JS) */
+.falling-word--destroyed {
+  animation: word-destroyed 0.3s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes word-destroyed {
+  0%   { opacity: 1; filter: brightness(3); }
+  100% { opacity: 0; filter: brightness(3); scale: 1.6; }
+}
+
+/* Word reached the ground: crumble in red (then removed by JS) */
+.falling-word--landed {
+  animation: word-landed 0.35s ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes word-landed {
+  0%   { opacity: 1; }
+  100% { opacity: 0; scale: 0.6; border-color: var(--wrong); color: var(--wrong); }
+}
+
+/* Floating score numbers spawned where a word is destroyed */
+.score-float {
+  position: absolute;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(255, 213, 74, 0.7);
+  pointer-events: none;
+  animation: score-float 0.8s ease-out forwards;
+  z-index: 4;
+}
+
+@keyframes score-float {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-60px) scale(1.25); }
+}
+
+/* ============================================================
+   Feedback effects
+   ============================================================ */
+
+/* Screen shake applied to the whole game when a word lands */
+.shake {
+  animation: shake 0.4s ease-out;
+}
+
+@keyframes shake {
+  0%   { transform: translate(0, 0); }
+  15%  { transform: translate(-12px, 6px); }
+  30%  { transform: translate(10px, -8px); }
+  45%  { transform: translate(-8px, 4px); }
+  60%  { transform: translate(6px, -4px); }
+  75%  { transform: translate(-4px, 2px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Red edge vignette that flashes with player damage */
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 30, 50, 0.5) 100%);
+  z-index: 5;
+}
+
+.vignette--flash {
+  animation: vignette-flash 0.45s ease-out;
+}
+
+@keyframes vignette-flash {
+  0%   { opacity: 0; }
+  25%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ============================================================
+   Overlays (start / game over)
+   ============================================================ */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  /* No align/justify centering here: the panel centers itself with
+     margin auto, which degrades to scrolling instead of clipping
+     when the panel is taller than the viewport */
+  overflow-y: auto;
+  background: rgba(6, 3, 12, 0.88);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease;
+  z-index: 10;
+}
+
+.overlay--visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.overlay__panel {
+  text-align: center;
+  margin: auto; /* centers when it fits, scrolls when it doesn't */
+  padding: 28px 48px;
+  background: var(--bg-panel);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 0 50px rgba(120, 60, 255, 0.25);
+  max-width: 90vw;
+}
+
+.overlay__title {
+  font-size: clamp(24px, 3.5vw, 34px);
+  letter-spacing: 4px;
+  margin-bottom: 12px;
+  color: var(--accent);
+  text-shadow: 0 0 16px rgba(255, 213, 74, 0.45);
+}
+
+.overlay__title--defeat {
+  color: var(--wrong);
+  text-shadow: 0 0 16px rgba(255, 77, 109, 0.45);
+}
+
+.overlay__text {
+  color: var(--text-dim);
+  line-height: 1.8;
+  margin-bottom: 26px;
+  font-size: 15px;
+}
+
+.overlay__hint {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+/* Big final score readout on the game-over screen */
+.final-score {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+}
+
+.final-score__label {
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: var(--text-dim);
+}
+
+.final-score__value {
+  font-size: clamp(34px, 5vw, 48px);
+  font-weight: bold;
+  color: var(--accent);
+  text-shadow: 0 0 24px rgba(255, 213, 74, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "NEW BEST!" badge, shown only when the all-time score record breaks */
+.final-score__record {
+  display: none;
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: var(--correct);
+  text-shadow: 0 0 12px rgba(93, 255, 157, 0.5);
+  animation: stat-pop 0.4s ease-out;
+}
+
+.final-score__record--visible {
+  display: block;
+}
+
+/* End-screen stats table */
+.stats {
+  list-style: none;
+  margin: 0 auto 16px;
+  width: 280px;
+  text-align: left;
+}
+
+.stats__row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 4px;
+  border-bottom: 1px dashed var(--border);
+  font-size: 15px;
+}
+
+.stats__row span:first-child { color: var(--text-dim); }
+.stats__row span:last-child  { color: var(--text); font-weight: bold; }
+
+/* Best score row stands out in gold */
+.stats__row--best span:first-child,
+.stats__row--best span:last-child {
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(255, 213, 74, 0.4);
+}
+
+.stats__row--best {
+  border-bottom-color: var(--accent);
+}
+
+/* ...and turns green when the record was just broken this round */
+.stats__row--record span:first-child,
+.stats__row--record span:last-child {
+  color: var(--correct);
+  text-shadow: 0 0 10px rgba(93, 255, 157, 0.45);
+}
+
+.stats__row--record {
+  border-bottom-color: var(--correct);
+}
+
+/* Encouraging WPM comparison line under the stats */
+.wpm-message {
+  max-width: 360px;
+  margin: 0 auto 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(255, 213, 74, 0.3);
+}
+
+/* Buttons */
+.btn {
+  font: inherit;
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  padding: 14px 38px;
+  color: #1a1030;
+  background: linear-gradient(180deg, #ffe27a, var(--accent));
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #b8922a, 0 0 24px rgba(255, 213, 74, 0.35);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #b8922a, 0 0 30px rgba(255, 213, 74, 0.5);
+}
+
+.btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #b8922a, 0 0 18px rgba(255, 213, 74, 0.3);
+}
+
+.btn--secondary {
+  color: var(--text);
+  background: linear-gradient(180deg, #4a3a7e, var(--border));
+  box-shadow: 0 4px 0 #241a42, 0 0 24px rgba(120, 60, 255, 0.25);
+}
+
+.btn--secondary:hover {
+  box-shadow: 0 6px 0 #241a42, 0 0 30px rgba(120, 60, 255, 0.4);
+}
+
+.btn--secondary:active {
+  box-shadow: 0 1px 0 #241a42, 0 0 18px rgba(120, 60, 255, 0.2);
+}
+
+.btn--ghost {
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  box-shadow: none;
+  padding: 10px 26px;
+  font-size: 14px;
+}
+
+.btn--ghost:hover {
+  color: var(--text);
+  transform: none;
+  box-shadow: 0 0 14px rgba(120, 60, 255, 0.25);
+}
+
+.btn-row {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.overlay__hint--warn {
+  color: var(--wrong);
+  font-size: 13px;
+  min-height: 1.2em;
+  margin-bottom: 10px;
+}
+
+/* ============================================================
+   Online setup: name / room inputs
+   ============================================================ */
+
+.text-input {
+  display: block;
+  width: min(300px, 80vw);
+  margin: 0 auto 16px;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 17px;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg-deep);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+}
+
+.text-input:focus {
+  border-color: var(--accent);
+}
+
+.join-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.text-input--code {
+  width: 110px;
+  margin: 0;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+/* Big shareable room code while waiting */
+.room-code {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 18px;
+}
+
+.room-code--hidden { display: none; }
+
+.room-code__label {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+.room-code__value {
+  font-size: 56px;
+  font-weight: bold;
+  letter-spacing: 14px;
+  color: var(--accent);
+  text-shadow: 0 0 24px rgba(255, 213, 74, 0.5);
+}
+
+.room-code__waiting {
+  font-size: 14px;
+  color: var(--text-dim);
+  animation: waiting-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes waiting-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* ============================================================
+   Countdown
+   ============================================================ */
+
+.countdown {
+  margin: auto;
+  font-size: clamp(90px, 20vw, 180px);
+  font-weight: bold;
+  color: var(--accent);
+  text-shadow: 0 0 50px rgba(255, 213, 74, 0.6);
+  animation: countdown-pop 1s ease-out infinite;
+}
+
+@keyframes countdown-pop {
+  0%   { transform: scale(1.4); opacity: 0; }
+  25%  { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.9; }
+}
+
+/* ============================================================
+   Live opponent panel (online matches)
+   ============================================================ */
+
+.opponent {
+  position: absolute;
+  top: 78px;
+  right: 28px;
+  width: 190px;
+  padding: 10px 14px;
+  background: rgba(23, 16, 40, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  z-index: 3;
+}
+
+.opponent--hidden { display: none; }
+
+.opponent__name {
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: var(--wrong);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opponent__bar {
+  height: 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #0d0a18;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.opponent__bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #9d1f3c, var(--wrong));
+  transition: width 0.3s ease-out;
+}
+
+.opponent__stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.opponent__stats span:first-child {
+  color: var(--text);
+  font-weight: bold;
+}
+
+/* ============================================================
+   Versus results (online match end)
+   ============================================================ */
+
+.versus--hidden { display: none; }
+
+.versus__banner {
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: var(--correct);
+  text-shadow: 0 0 16px rgba(93, 255, 157, 0.5);
+  margin-bottom: 16px;
+}
+
+.versus__banner--lost {
+  color: var(--wrong);
+  text-shadow: 0 0 16px rgba(255, 77, 109, 0.5);
+}
+
+.versus__columns {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.versus__col {
+  width: 150px;
+  padding: 14px 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.versus__col--winner {
+  border-color: var(--accent);
+  box-shadow: 0 0 18px rgba(255, 213, 74, 0.3);
+}
+
+.versus__vs {
+  align-self: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+}
+
+.versus__name {
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.versus__score {
+  font-size: 30px;
+  font-weight: bold;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 8px;
+}
+
+.versus__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.versus__rows b {
+  color: var(--text);
+}
+
+/* ============================================================
+   Leaderboard
+   ============================================================ */
+
+.leaderboard {
+  margin-top: 22px;
+}
+
+.leaderboard--hidden { display: none; }
+
+.leaderboard__title {
+  font-size: 15px;
+  letter-spacing: 3px;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+.leaderboard__list {
+  list-style: none;
+  width: min(340px, 80vw);
+  margin: 0 auto;
+  text-align: left;
+}
+
+.leaderboard__list li {
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px;
+  font-size: 14px;
+  border-bottom: 1px dashed var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.leaderboard__list li .lb-rank  { color: var(--text-dim); width: 26px; }
+.leaderboard__list li .lb-name  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaderboard__list li .lb-score { font-weight: bold; color: var(--accent); }
+.leaderboard__list li .lb-wpm   { color: var(--text-dim); width: 70px; text-align: right; }
+
+/* Rows belonging to the current player glow green */
+.leaderboard__list li.lb-me .lb-name,
+.leaderboard__list li.lb-me .lb-score {
+  color: var(--correct);
+  text-shadow: 0 0 8px rgba(93, 255, 157, 0.4);
+}
+
+.leaderboard__list--compact li { font-size: 13px; padding: 4px 8px; }
+
+.leaderboard__placement {
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--correct);
+  margin-bottom: 8px;
+  min-height: 1.2em;
+}
+
+#lb-end { margin: 0 auto 18px; }
+
+/* ============================================================
+   Small screens
+   ============================================================ */
+
+@media (max-width: 600px) {
+  .hud { padding: 10px 14px; }
+  .hud__stat { min-width: 80px; }
+  .hud__stat-label { font-size: 10px; letter-spacing: 2px; }
+  .hud__stat-value { font-size: 18px; }
+  .falling-word { font-size: 18px; letter-spacing: 1px; }
+  .overlay__panel { padding: 28px 22px; }
+}

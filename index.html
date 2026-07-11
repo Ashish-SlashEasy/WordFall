@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Word Fall</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game" class="game">
+
+    <!-- ===== Top HUD: score / streak / level ===== -->
+    <header class="hud hud--top">
+      <div class="hud__stat">
+        <span class="hud__stat-label">SCORE</span>
+        <span id="hud-score" class="hud__stat-value">0</span>
+        <span id="hud-best-score" class="hud__stat-sub">BEST 0</span>
+      </div>
+      <div id="hud-streak-box" class="hud__stat hud__stat--center">
+        <span class="hud__stat-label">STREAK</span>
+        <span id="hud-streak" class="hud__stat-value">×0 (PTS ×1.0)</span>
+        <span id="hud-best-streak" class="hud__stat-sub">BEST ×0</span>
+      </div>
+      <div class="hud__stat hud__stat--right">
+        <span class="hud__stat-label">LEVEL</span>
+        <span id="hud-level" class="hud__stat-value">1</span>
+      </div>
+    </header>
+
+    <!-- ===== Live opponent panel (online matches only) ===== -->
+    <aside id="opponent-panel" class="opponent opponent--hidden">
+      <div class="opponent__name" id="opp-name">Opponent</div>
+      <div class="opponent__bar">
+        <div id="opp-hp-fill" class="opponent__bar-fill"></div>
+      </div>
+      <div class="opponent__stats">
+        <span id="opp-score">0</span>
+        <span id="opp-words">0 words</span>
+      </div>
+    </aside>
+
+    <!-- ===== Playfield: falling words are appended here by JS ===== -->
+    <main id="playfield" class="playfield">
+      <!-- Danger line: words crossing it damage the player -->
+      <div id="danger-line" class="danger-line"></div>
+    </main>
+
+    <!-- ===== Player health bar (bottom) ===== -->
+    <footer class="hud hud--bottom">
+      <div class="bar bar--player">
+        <div id="player-hp-fill" class="bar__fill bar__fill--player"></div>
+      </div>
+      <div class="hud__label">
+        <span class="hud__name">🛡️ HEALTH</span>
+        <span id="player-hp-text" class="hud__hp">100 / 100</span>
+      </div>
+    </footer>
+
+    <!-- Red vignette flash shown when a word lands -->
+    <div id="damage-vignette" class="vignette"></div>
+
+    <!-- ===== Start screen overlay ===== -->
+    <div id="start-screen" class="overlay overlay--visible">
+      <div class="overlay__panel">
+        <h1 class="overlay__title">🌠 WORD FALL</h1>
+        <p class="overlay__text">
+          Words rain from the sky — just start typing to lock onto one.<br />
+          Spell it correctly before it hits the ground to score points.<br />
+          Every word that lands costs you <strong>10 HP</strong>. At 0 HP, it's over.<br />
+          <span class="overlay__hint">Backspace = undo a letter · Esc = release target</span>
+        </p>
+        <div class="btn-row">
+          <button id="start-btn" class="btn">PLAY SOLO</button>
+          <button id="online-btn" class="btn btn--secondary">ONLINE 1v1</button>
+        </div>
+        <p id="online-hint" class="overlay__hint overlay__hint--warn"></p>
+
+        <!-- Global leaderboard (visible when served by server.js) -->
+        <div id="lb-start" class="leaderboard leaderboard--hidden">
+          <h2 class="leaderboard__title">🏆 TOP PLAYERS</h2>
+          <ol id="lb-start-list" class="leaderboard__list"></ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Online setup overlay (name + create/join room) ===== -->
+    <div id="online-screen" class="overlay">
+      <div class="overlay__panel">
+        <h1 class="overlay__title">🌐 ONLINE 1v1</h1>
+
+        <div id="online-setup">
+          <input
+            id="player-name"
+            class="text-input"
+            type="text"
+            maxlength="16"
+            placeholder="Your name"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div class="btn-row">
+            <button id="create-btn" class="btn">CREATE ROOM</button>
+          </div>
+          <div class="join-row">
+            <input
+              id="join-code"
+              class="text-input text-input--code"
+              type="text"
+              maxlength="4"
+              placeholder="CODE"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="join-btn" class="btn btn--secondary">JOIN</button>
+          </div>
+        </div>
+
+        <!-- Shown while waiting for the opponent -->
+        <div id="room-code-box" class="room-code room-code--hidden">
+          <span class="room-code__label">ROOM CODE — share it with your opponent</span>
+          <span id="room-code" class="room-code__value">----</span>
+          <span class="room-code__waiting">waiting for opponent…</span>
+        </div>
+
+        <p id="online-status" class="overlay__hint overlay__hint--warn"></p>
+        <button id="online-back" class="btn btn--ghost">BACK</button>
+      </div>
+    </div>
+
+    <!-- ===== Match countdown ===== -->
+    <div id="countdown-screen" class="overlay">
+      <div id="countdown" class="countdown">3</div>
+    </div>
+
+    <!-- ===== Game over overlay (filled in by JS) ===== -->
+    <div id="end-screen" class="overlay">
+      <div class="overlay__panel">
+        <h1 id="end-title" class="overlay__title overlay__title--defeat">💀 GAME OVER</h1>
+
+        <!-- Versus results: online matches only (JS toggles) -->
+        <div id="versus" class="versus versus--hidden">
+          <div id="versus-banner" class="versus__banner">YOU WIN!</div>
+          <div class="versus__columns">
+            <div class="versus__col" id="versus-me">
+              <div class="versus__name">You</div>
+              <div class="versus__score">0</div>
+              <div class="versus__rows">
+                <span>WPM <b>0</b></span>
+                <span>Accuracy <b>0%</b></span>
+                <span>Streak <b>0</b></span>
+              </div>
+            </div>
+            <div class="versus__vs">VS</div>
+            <div class="versus__col" id="versus-opp">
+              <div class="versus__name">Opponent</div>
+              <div class="versus__score">0</div>
+              <div class="versus__rows">
+                <span>WPM <b>0</b></span>
+                <span>Accuracy <b>0%</b></span>
+                <span>Streak <b>0</b></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Solo results -->
+        <div id="solo-results">
+          <div class="final-score">
+            <span class="final-score__label">FINAL SCORE</span>
+            <span id="final-score" class="final-score__value">0</span>
+            <span id="new-record" class="final-score__record">🎉 NEW BEST!</span>
+          </div>
+          <ul class="stats">
+            <li id="best-score-row" class="stats__row stats__row--best"><span>Best score</span><span id="stat-best-score">0</span></li>
+            <li class="stats__row"><span>Best streak</span><span id="stat-best-streak">0</span></li>
+            <li class="stats__row"><span>Words destroyed</span><span id="stat-words">0</span></li>
+            <li class="stats__row"><span>Words per minute</span><span id="stat-wpm">0</span></li>
+            <li class="stats__row"><span>Accuracy</span><span id="stat-accuracy">0%</span></li>
+            <li class="stats__row"><span>Max streak</span><span id="stat-streak">0</span></li>
+            <li class="stats__row"><span>Level reached</span><span id="stat-level">1</span></li>
+            <li class="stats__row"><span>Time survived</span><span id="stat-time">0:00</span></li>
+          </ul>
+        </div>
+
+        <p id="wpm-message" class="wpm-message"></p>
+
+        <!-- Compact global top-5 with your placement -->
+        <div id="lb-end" class="leaderboard leaderboard--hidden">
+          <p id="lb-placement" class="leaderboard__placement"></p>
+          <ol id="lb-end-list" class="leaderboard__list leaderboard__list--compact"></ol>
+        </div>
+
+        <button id="restart-btn" class="btn">TRY AGAIN</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="words.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
