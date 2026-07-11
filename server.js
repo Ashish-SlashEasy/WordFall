@@ -21,7 +21,9 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const PORT = Number(process.argv[2]) || 3000;
+// Hosting platforms (Render, Railway, etc.) assign the port via env var;
+// a CLI arg still works for local runs, e.g. `node server.js 3001`.
+const PORT = Number(process.env.PORT) || Number(process.argv[2]) || 3000;
 const ROOT = __dirname;
 const LEADERBOARD_FILE = path.join(ROOT, "leaderboard.json");
 const LEADERBOARD_CAP = 100;
