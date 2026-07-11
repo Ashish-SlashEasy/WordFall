@@ -6,8 +6,8 @@
 
    Responsibilities:
    - Serve the game's static files (index.html, script.js, ...)
-   - 2-player rooms with 4-letter codes; relay JSON messages
-     between the two players (Server-Sent Events for pushes,
+   - Rooms of 2-8 players (host picks the size); relay JSON
+     messages between them (Server-Sent Events for pushes,
      POST /send for client -> server messages)
    - Persistent global leaderboard in leaderboard.json
 
@@ -28,6 +28,7 @@ const ROOT = __dirname;
 const LEADERBOARD_FILE = path.join(ROOT, "leaderboard.json");
 const LEADERBOARD_CAP = 100;
 const ROOM_TTL_MS = 10 * 60 * 1000; // stale rooms expire after 10 min
+const ALLOWED_ROOM_SIZES = [2, 3, 4, 6, 8];
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -67,7 +68,7 @@ function recordScore({ name, score, wpm, accuracy, mode }) {
     score: Math.max(0, Number(score) || 0),
     wpm: Math.max(0, Number(wpm) || 0),
     accuracy: Math.max(0, Math.min(100, Number(accuracy) || 0)),
-    mode: mode === "1v1" ? "1v1" : "solo",
+    mode: mode === "solo" ? "solo" : "online",
     date: new Date().toISOString().slice(0, 10),
   };
   leaderboard.push(entry);
@@ -80,9 +81,13 @@ function recordScore({ name, score, wpm, accuracy, mode }) {
 }
 
 /* ------------------------------------------------------------
-   Rooms
+   Rooms: 2-8 players, host picks the size at creation.
    ------------------------------------------------------------ */
-// code -> { players: [{id, name, res|null, stats|null}], started, dead: Set, touched }
+// code -> {
+//   size, started, finished, touched,
+//   players: [{id, name, res|null, stats|null, alive, eliminatedAt, eliminatedReason}],
+//   eliminationOrder: [playerId, ...]  // earliest death first
+// }
 const rooms = new Map();
 
 function makeRoomCode() {
@@ -100,43 +105,61 @@ function push(player, type, data) {
   player.res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
 }
 
-function opponentOf(room, playerId) {
-  return room.players.find((p) => p.id !== playerId);
-}
-
 function touch(room) {
   room.touched = Date.now();
 }
 
-/** Both players present: hand out the shared seed and start the match. */
+/** Tell everyone in the lobby who has joined so far (pre-match only). */
+function broadcastLobby(room) {
+  const info = { joined: room.players.length, size: room.size, names: room.players.map((p) => p.name) };
+  for (const p of room.players) push(p, "lobby-update", info);
+}
+
+/** All seats filled and connected: hand out the shared seed and start. */
 function startMatch(room) {
   room.started = true;
   const seed = Math.floor(Math.random() * 2 ** 31);
-  for (const p of room.players) {
-    push(p, "start", { seed, opponentName: opponentOf(room, p.id).name });
-  }
+  const roster = room.players.map((p) => ({ id: p.id, name: p.name }));
+  for (const p of room.players) push(p, "start", { seed, players: roster });
 }
 
-/** A player died (or forfeited): the other one wins; tell both. */
-function finishMatch(room, loserId, reason) {
+/** Mark a player out (death or disconnect); ends the match once <= 1 remain. */
+function eliminate(room, playerId, reason) {
+  if (room.finished) return;
+  const player = room.players.find((p) => p.id === playerId);
+  if (!player || !player.alive) return;
+
+  player.alive = false;
+  player.eliminatedAt = Date.now();
+  player.eliminatedReason = reason;
+  room.eliminationOrder.push(playerId);
+
+  for (const p of room.players) push(p, "player-eliminated", { id: playerId, name: player.name, reason });
+
+  const aliveCount = room.players.filter((p) => p.alive).length;
+  if (aliveCount <= 1) finishMatch(room);
+}
+
+/** Build the final ranking, record every player's run, and tell everyone. */
+function finishMatch(room) {
   if (room.finished) return;
   room.finished = true;
-  const winner = opponentOf(room, loserId);
-  const loser = room.players.find((p) => p.id === loserId);
 
-  // Record both players' final runs on the leaderboard
-  for (const p of room.players) {
-    if (p.stats) recordScore({ ...p.stats, name: p.name, mode: "1v1" });
+  const survivor = room.players.find((p) => p.alive);
+  const orderedIds = [];
+  if (survivor) orderedIds.push(survivor.id);
+  for (let i = room.eliminationOrder.length - 1; i >= 0; i--) orderedIds.push(room.eliminationOrder[i]);
+
+  const results = orderedIds.map((id, i) => {
+    const p = room.players.find((q) => q.id === id);
+    return { id: p.id, name: p.name, stats: p.stats, rank: i + 1, reason: p.eliminatedReason || null };
+  });
+
+  for (const r of results) {
+    if (r.stats) recordScore({ name: r.name, ...r.stats, mode: "online" });
   }
 
-  for (const p of room.players) {
-    push(p, "gameover", {
-      winnerId: winner ? winner.id : null,
-      reason,
-      stats: room.players.map((q) => ({ id: q.id, name: q.name, stats: q.stats })),
-    });
-  }
-  void loser;
+  for (const p of room.players) push(p, "gameover", { results });
 }
 
 // Periodic cleanup of stale rooms
@@ -157,10 +180,26 @@ function handleMessage(msg, respond) {
   const type = msg.type;
 
   if (type === "create") {
+    const size = ALLOWED_ROOM_SIZES.includes(Number(msg.size)) ? Number(msg.size) : 2;
     const code = makeRoomCode();
-    const player = { id: "p1", name: String(msg.name || "Player 1").slice(0, 16), res: null, stats: null };
-    rooms.set(code, { players: [player], started: false, finished: false, touched: Date.now() });
-    return respond(200, { room: code, playerId: "p1" });
+    const player = {
+      id: "p1",
+      name: String(msg.name || "Player 1").slice(0, 16),
+      res: null,
+      stats: null,
+      alive: true,
+      eliminatedAt: null,
+      eliminatedReason: null,
+    };
+    rooms.set(code, {
+      size,
+      players: [player],
+      started: false,
+      finished: false,
+      eliminationOrder: [],
+      touched: Date.now(),
+    });
+    return respond(200, { room: code, playerId: "p1", size });
   }
 
   const room = rooms.get(String(msg.room || "").toUpperCase());
@@ -168,26 +207,37 @@ function handleMessage(msg, respond) {
   touch(room);
 
   if (type === "join") {
-    if (room.players.length >= 2) return respond(409, { error: "Room is full" });
-    if (room.finished) return respond(409, { error: "Match already over" });
-    room.players.push({ id: "p2", name: String(msg.name || "Player 2").slice(0, 16), res: null, stats: null });
-    return respond(200, { playerId: "p2" });
-    // Match starts once p2's SSE connection is up (see /events)
+    if (room.started) return respond(409, { error: "Match already started" });
+    if (room.players.length >= room.size) return respond(409, { error: "Room is full" });
+    const player = {
+      id: "p" + (room.players.length + 1),
+      name: String(msg.name || `Player ${room.players.length + 1}`).slice(0, 16),
+      res: null,
+      stats: null,
+      alive: true,
+      eliminatedAt: null,
+      eliminatedReason: null,
+    };
+    room.players.push(player);
+    broadcastLobby(room); // update anyone already waiting in the lobby
+    return respond(200, { playerId: player.id, size: room.size });
   }
 
   const player = room.players.find((p) => p.id === msg.playerId);
   if (!player) return respond(403, { error: "Unknown player" });
 
   if (type === "state") {
-    // Keep last known stats for the leaderboard, relay to the opponent
+    // Keep last known stats for the leaderboard, relay to everyone else
     player.stats = msg.stats;
-    push(opponentOf(room, player.id), "opponent-state", { stats: msg.stats });
+    for (const other of room.players) {
+      if (other.id !== player.id) push(other, "opponent-state", { id: player.id, stats: msg.stats });
+    }
     return respond(200, { ok: true });
   }
 
   if (type === "death") {
     player.stats = msg.stats;
-    finishMatch(room, player.id, "death");
+    eliminate(room, player.id, "death");
     return respond(200, { ok: true });
   }
 
@@ -221,17 +271,21 @@ const server = http.createServer((req, res) => {
     // Keep proxies from killing the idle stream
     const ping = setInterval(() => res.write(": ping\n\n"), 25000);
 
-    // Both players connected -> start the match
-    if (!room.started && room.players.length === 2 && room.players.every((p) => p.res)) {
-      startMatch(room);
+    if (!room.started) {
+      broadcastLobby(room);
+      // All seats filled and everyone connected -> start the match
+      if (room.players.length === room.size && room.players.every((p) => p.res)) {
+        startMatch(room);
+      }
     }
 
     req.on("close", () => {
       clearInterval(ping);
       player.res = null;
-      // Dropping mid-match forfeits the game
-      if (room.started && !room.finished) {
-        finishMatch(room, player.id, "forfeit");
+      // Dropping mid-match eliminates you; dropping in the lobby just
+      // leaves your seat unconnected (the match won't start without you)
+      if (room.started && !room.finished && player.alive) {
+        eliminate(room, player.id, "forfeit");
       }
       // Delete the room once everyone is gone
       if (room.players.every((p) => !p.res)) {
@@ -302,11 +356,11 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`Word Fall server running:`);
   console.log(`  You:            http://localhost:${PORT}`);
-  // Print LAN addresses so the second player knows where to connect
+  // Print LAN addresses so other players know where to connect
   for (const addrs of Object.values(os.networkInterfaces())) {
     for (const a of addrs || []) {
       if (a.family === "IPv4" && !a.internal) {
-        console.log(`  Your opponent:  http://${a.address}:${PORT}`);
+        console.log(`  Your friends:   http://${a.address}:${PORT}`);
       }
     }
   }

@@ -27,17 +27,16 @@
       </div>
     </header>
 
-    <!-- ===== Live opponent panel (online matches only) ===== -->
-    <aside id="opponent-panel" class="opponent opponent--hidden">
-      <div class="opponent__name" id="opp-name">Opponent</div>
-      <div class="opponent__bar">
-        <div id="opp-hp-fill" class="opponent__bar-fill"></div>
-      </div>
-      <div class="opponent__stats">
-        <span id="opp-score">0</span>
-        <span id="opp-words">0 words</span>
-      </div>
+    <!-- ===== Live scoreboard: everyone else in the match (online only) ===== -->
+    <aside id="scoreboard-panel" class="scoreboard scoreboard--hidden">
+      <div class="scoreboard__title">PLAYERS</div>
+      <ul id="scoreboard-list" class="scoreboard__list"></ul>
     </aside>
+
+    <!-- ===== Shown after you're eliminated but the match is still going ===== -->
+    <div id="spectate-banner" class="spectate-banner spectate-banner--hidden">
+      <span id="spectate-text">You're out — watching the rest of the match…</span>
+    </div>
 
     <!-- ===== Playfield: falling words are appended here by JS ===== -->
     <main id="playfield" class="playfield">
@@ -98,6 +97,18 @@
             autocomplete="off"
             spellcheck="false"
           />
+
+          <div class="size-row">
+            <span class="size-row__label">Room size</span>
+            <div id="size-buttons" class="size-buttons">
+              <button type="button" class="size-btn" data-size="2">2</button>
+              <button type="button" class="size-btn" data-size="3">3</button>
+              <button type="button" class="size-btn size-btn--active" data-size="4">4</button>
+              <button type="button" class="size-btn" data-size="6">6</button>
+              <button type="button" class="size-btn" data-size="8">8</button>
+            </div>
+          </div>
+
           <div class="btn-row">
             <button id="create-btn" class="btn">CREATE ROOM</button>
           </div>
@@ -115,11 +126,14 @@
           </div>
         </div>
 
-        <!-- Shown while waiting for the opponent -->
+        <!-- Shown while waiting for the room to fill up -->
         <div id="room-code-box" class="room-code room-code--hidden">
-          <span class="room-code__label">ROOM CODE — share it with your opponent</span>
+          <span class="room-code__label">ROOM CODE — share it with your friends</span>
           <span id="room-code" class="room-code__value">----</span>
-          <span class="room-code__waiting">waiting for opponent…</span>
+          <div class="lobby-roster">
+            <span id="lobby-progress" class="lobby-roster__progress">1/4 joined</span>
+            <ul id="lobby-names" class="lobby-roster__names"></ul>
+          </div>
         </div>
 
         <p id="online-status" class="overlay__hint overlay__hint--warn"></p>
@@ -137,30 +151,10 @@
       <div class="overlay__panel">
         <h1 id="end-title" class="overlay__title overlay__title--defeat">💀 GAME OVER</h1>
 
-        <!-- Versus results: online matches only (JS toggles) -->
-        <div id="versus" class="versus versus--hidden">
-          <div id="versus-banner" class="versus__banner">YOU WIN!</div>
-          <div class="versus__columns">
-            <div class="versus__col" id="versus-me">
-              <div class="versus__name">You</div>
-              <div class="versus__score">0</div>
-              <div class="versus__rows">
-                <span>WPM <b>0</b></span>
-                <span>Accuracy <b>0%</b></span>
-                <span>Streak <b>0</b></span>
-              </div>
-            </div>
-            <div class="versus__vs">VS</div>
-            <div class="versus__col" id="versus-opp">
-              <div class="versus__name">Opponent</div>
-              <div class="versus__score">0</div>
-              <div class="versus__rows">
-                <span>WPM <b>0</b></span>
-                <span>Accuracy <b>0%</b></span>
-                <span>Streak <b>0</b></span>
-              </div>
-            </div>
-          </div>
+        <!-- Ranked results: online matches only (JS toggles) -->
+        <div id="match-results" class="match-results match-results--hidden">
+          <div id="results-banner" class="match-results__banner">🏆 YOU WIN!</div>
+          <ol id="results-list" class="match-results__list"></ol>
         </div>
 
         <!-- Solo results -->

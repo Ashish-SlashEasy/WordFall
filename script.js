@@ -89,22 +89,22 @@ const el = {
   createBtn: document.getElementById("create-btn"),
   joinCode: document.getElementById("join-code"),
   joinBtn: document.getElementById("join-btn"),
+  sizeButtons: document.getElementById("size-buttons"),
   roomCodeBox: document.getElementById("room-code-box"),
   roomCode: document.getElementById("room-code"),
+  lobbyProgress: document.getElementById("lobby-progress"),
+  lobbyNames: document.getElementById("lobby-names"),
   onlineStatus: document.getElementById("online-status"),
   onlineBack: document.getElementById("online-back"),
   countdownScreen: document.getElementById("countdown-screen"),
   countdown: document.getElementById("countdown"),
-  opponentPanel: document.getElementById("opponent-panel"),
-  oppName: document.getElementById("opp-name"),
-  oppHpFill: document.getElementById("opp-hp-fill"),
-  oppScore: document.getElementById("opp-score"),
-  oppWords: document.getElementById("opp-words"),
+  scoreboardPanel: document.getElementById("scoreboard-panel"),
+  scoreboardList: document.getElementById("scoreboard-list"),
+  spectateBanner: document.getElementById("spectate-banner"),
   endTitle: document.getElementById("end-title"),
-  versus: document.getElementById("versus"),
-  versusBanner: document.getElementById("versus-banner"),
-  versusMe: document.getElementById("versus-me"),
-  versusOpp: document.getElementById("versus-opp"),
+  matchResults: document.getElementById("match-results"),
+  resultsBanner: document.getElementById("results-banner"),
+  resultsList: document.getElementById("results-list"),
   soloResults: document.getElementById("solo-results"),
   lbStart: document.getElementById("lb-start"),
   lbStartList: document.getElementById("lb-start-list"),
@@ -187,7 +187,7 @@ function startGame(rand) {
 
   el.startScreen.classList.remove("overlay--visible");
   el.endScreen.classList.remove("overlay--visible");
-  el.opponentPanel.classList.toggle("opponent--hidden", net.mode !== "online");
+  el.scoreboardPanel.classList.toggle("scoreboard--hidden", net.mode !== "online");
 
   // Drop button focus so Space/Enter while playing can't re-trigger a restart
   el.startBtn.blur();
@@ -578,8 +578,10 @@ function endGame() {
   const stats = finalStats();
 
   if (net.mode === "online") {
-    // The versus screen appears when the server confirms the result
+    // Eliminated but the match isn't over: watch the live scoreboard until
+    // the server sends the final ranked results to everyone at once
     sendDeath(stats);
+    el.spectateBanner.classList.remove("spectate-banner--hidden");
     return;
   }
   showSoloResults(stats);
@@ -592,7 +594,7 @@ function showSoloResults(stats) {
   const isNewRecord = stats.score > 0 && stats.score > state.bestAtStart;
 
   el.endTitle.textContent = "💀 GAME OVER";
-  el.versus.classList.add("versus--hidden");
+  el.matchResults.classList.add("match-results--hidden");
   el.soloResults.style.display = "";
 
   el.finalScore.textContent = stats.score;
@@ -628,8 +630,10 @@ const net = {
   room: null,
   playerId: null,
   myName: "",
-  oppName: "",
-  lastSent: 0,  // throttle timestamp for state snapshots
+  roomSize: 4,      // chosen on Create; server echoes the real value back
+  roster: [],       // [{id, name}] for everyone in the current match
+  rows: {},         // playerId -> scoreboard <li> element
+  lastSent: 0,      // throttle timestamp for state snapshots
 };
 
 /** Deterministic PRNG (mulberry32) — both players seed it identically,
@@ -693,7 +697,10 @@ function leaveOnline() {
   net.mode = "solo";
   net.room = null;
   net.playerId = null;
-  el.opponentPanel.classList.add("opponent--hidden");
+  net.roster = [];
+  net.rows = {};
+  el.scoreboardPanel.classList.add("scoreboard--hidden");
+  el.spectateBanner.classList.add("spectate-banner--hidden");
   el.restartBtn.textContent = "TRY AGAIN";
 }
 
@@ -701,13 +708,15 @@ async function createRoom() {
   net.myName = getMyName();
   el.onlineStatus.textContent = "";
   try {
-    const res = await netSend({ type: "create", name: net.myName });
+    const res = await netSend({ type: "create", name: net.myName, size: net.roomSize });
     if (res.error) return void (el.onlineStatus.textContent = res.error);
     net.room = res.room;
     net.playerId = res.playerId;
+    net.roomSize = res.size;
     el.roomCode.textContent = res.room;
     el.onlineSetup.style.display = "none";
     el.roomCodeBox.classList.remove("room-code--hidden");
+    renderLobby({ joined: 1, size: res.size, names: [net.myName] });
     openEvents();
   } catch {
     el.onlineStatus.textContent = "Could not reach the server.";
@@ -727,7 +736,8 @@ async function joinRoom() {
     if (res.error) return void (el.onlineStatus.textContent = res.error);
     net.room = code;
     net.playerId = res.playerId;
-    el.onlineStatus.textContent = "Joined! Starting…";
+    net.roomSize = res.size;
+    el.onlineStatus.textContent = "Joined! Waiting for the room to fill…";
     openEvents();
   } catch {
     el.onlineStatus.textContent = "Could not reach the server.";
@@ -738,21 +748,32 @@ function openEvents() {
   net.es = new EventSource(`/events?room=${net.room}&player=${net.playerId}`);
   net.es.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-    if (msg.type === "start") beginMatch(msg);
-    else if (msg.type === "opponent-state") renderOpponent(msg.stats);
+    if (msg.type === "lobby-update") renderLobby(msg);
+    else if (msg.type === "start") beginMatch(msg);
+    else if (msg.type === "opponent-state") updateScoreboardRow(msg.id, msg.stats);
+    else if (msg.type === "player-eliminated") markEliminated(msg.id);
     else if (msg.type === "gameover") onMatchOver(msg);
   };
 }
 
-/** Both players are in: 3-2-1 countdown, then the seeded round starts. */
-function beginMatch({ seed, opponentName }) {
+/** Live "N/size joined" readout while waiting in the room-code lobby. */
+function renderLobby({ joined, size, names }) {
+  el.lobbyProgress.textContent = `${joined}/${size} joined`;
+  el.lobbyNames.replaceChildren();
+  for (const name of names) {
+    const li = document.createElement("li");
+    li.textContent = name;
+    el.lobbyNames.appendChild(li);
+  }
+}
+
+/** Every seat filled: 3-2-1 countdown, then the seeded round starts. */
+function beginMatch({ seed, players }) {
   net.mode = "online";
-  net.oppName = opponentName;
+  net.roster = players;
   el.onlineScreen.classList.remove("overlay--visible");
-  el.oppName.textContent = opponentName;
-  el.oppScore.textContent = "0";
-  el.oppWords.textContent = "0 words";
-  el.oppHpFill.style.width = "100%";
+  el.spectateBanner.classList.add("spectate-banner--hidden");
+  buildScoreboard(players);
 
   el.countdownScreen.classList.add("overlay--visible");
   let n = 3;
@@ -770,8 +791,37 @@ function beginMatch({ seed, opponentName }) {
   }, 1000);
 }
 
-/** Throttled snapshot of our run — feeds the opponent's panel and the
- *  server's leaderboard record for the match survivor. */
+/** Build one live scoreboard row per opponent (everyone but ourselves). */
+function buildScoreboard(players) {
+  el.scoreboardList.replaceChildren();
+  net.rows = {};
+  for (const p of players) {
+    if (p.id === net.playerId) continue;
+
+    const name = document.createElement("span");
+    name.className = "scoreboard__name";
+    name.textContent = p.name;
+
+    const barFill = document.createElement("span");
+    barFill.className = "scoreboard__bar-fill";
+    const bar = document.createElement("span");
+    bar.className = "scoreboard__bar";
+    bar.appendChild(barFill);
+
+    const score = document.createElement("span");
+    score.className = "scoreboard__score";
+    score.textContent = "0";
+
+    const li = document.createElement("li");
+    li.className = "scoreboard__row";
+    li.append(name, bar, score);
+    el.scoreboardList.appendChild(li);
+    net.rows[p.id] = { row: li, barFill, score };
+  }
+}
+
+/** Throttled snapshot of our run — feeds everyone else's scoreboard row and
+ *  the server's leaderboard record once we're eliminated or win. */
 function maybeSendState() {
   const now = performance.now();
   if (now - net.lastSent < 250) return;
@@ -784,11 +834,16 @@ function maybeSendState() {
   }).catch(() => {});
 }
 
-function renderOpponent(stats) {
-  if (!stats) return;
-  el.oppScore.textContent = stats.score;
-  el.oppWords.textContent = `${stats.words} words`;
-  el.oppHpFill.style.width = Math.max(0, stats.hp) + "%";
+function updateScoreboardRow(id, stats) {
+  const entry = net.rows[id];
+  if (!entry || !stats) return;
+  entry.score.textContent = stats.score;
+  entry.barFill.style.width = Math.max(0, stats.hp) + "%";
+}
+
+function markEliminated(id) {
+  const entry = net.rows[id];
+  if (entry) entry.row.classList.add("scoreboard__row--out");
 }
 
 function sendDeath(stats) {
@@ -800,10 +855,10 @@ function sendDeath(stats) {
   }).catch(() => {});
 }
 
-/** Server declared the match result: freeze play, show the versus screen. */
+/** Server declared the final ranking: freeze play, show ranked results. */
 function onMatchOver(msg) {
   if (state && state.running) {
-    // We survived — stop our still-running board
+    // We were still playing (won by outlasting/forfeit) — stop our board
     state.running = false;
     cancelAnimationFrame(rafId);
     setTarget(null);
@@ -813,39 +868,57 @@ function onMatchOver(msg) {
     net.es.close();
     net.es = null;
   }
+  el.spectateBanner.classList.add("spectate-banner--hidden");
 
-  const iWon = msg.winnerId === net.playerId;
-  const mine = state ? finalStats() : { score: 0, wpm: 0, accuracy: 0, streak: 0 };
-  const oppEntry = (msg.stats || []).find((p) => p.id !== net.playerId);
-  const theirs = (oppEntry && oppEntry.stats) || { score: 0, wpm: 0, accuracy: 0, streak: 0 };
+  const results = msg.results || [];
+  const mine = results.find((r) => r.id === net.playerId);
+  const iWon = !!mine && mine.rank === 1;
 
   el.endTitle.textContent = "🏁 MATCH OVER";
-  el.versusBanner.textContent = iWon
-    ? msg.reason === "forfeit"
-      ? "OPPONENT LEFT — YOU WIN!"
-      : "🏆 YOU WIN!"
-    : "YOU LOSE — REMATCH?";
-  el.versusBanner.classList.toggle("versus__banner--lost", !iWon);
+  el.resultsBanner.textContent = iWon
+    ? "🏆 YOU WIN!"
+    : mine
+    ? `YOU FINISHED #${mine.rank} of ${results.length}`
+    : "MATCH OVER";
+  el.resultsBanner.classList.toggle("match-results__banner--lost", !iWon);
 
-  fillVersusCol(el.versusMe, "You", mine, iWon);
-  fillVersusCol(el.versusOpp, net.oppName, theirs, !iWon);
+  renderResults(results);
 
   el.soloResults.style.display = "none";
-  el.versus.classList.remove("versus--hidden");
-  el.wpmMessage.textContent = wpmMessage(mine.wpm);
+  el.matchResults.classList.remove("match-results--hidden");
+  el.wpmMessage.textContent = mine && mine.stats ? wpmMessage(mine.stats.wpm) : "";
   refreshEndLeaderboard(""); // match scores were recorded server-side
 
   el.endScreen.classList.add("overlay--visible");
 }
 
-function fillVersusCol(col, name, stats, winner) {
-  col.classList.toggle("versus__col--winner", winner);
-  col.querySelector(".versus__name").textContent = name;
-  col.querySelector(".versus__score").textContent = stats.score;
-  const rows = col.querySelectorAll(".versus__rows b");
-  rows[0].textContent = stats.wpm;
-  rows[1].textContent = stats.accuracy + "%";
-  rows[2].textContent = stats.streak;
+/** Ranked results list: one row per player, winner and "you" highlighted. */
+function renderResults(results) {
+  el.resultsList.replaceChildren();
+  for (const r of results) {
+    const rank = document.createElement("span");
+    rank.className = "match-results__rank";
+    rank.textContent = r.rank === 1 ? "🏆" : `#${r.rank}`;
+
+    const name = document.createElement("span");
+    name.className = "match-results__name";
+    name.textContent = r.id === net.playerId ? `${r.name} (you)` : r.name;
+
+    const score = document.createElement("span");
+    score.className = "match-results__score";
+    score.textContent = r.stats ? r.stats.score : 0;
+
+    const meta = document.createElement("span");
+    meta.className = "match-results__meta";
+    meta.textContent = r.stats ? `${r.stats.wpm} wpm · ${r.stats.accuracy}% accuracy` : "";
+
+    const li = document.createElement("li");
+    li.className = "match-results__row";
+    if (r.rank === 1) li.classList.add("match-results__row--winner");
+    if (r.id === net.playerId) li.classList.add("match-results__row--me");
+    li.append(rank, name, score, meta);
+    el.resultsList.appendChild(li);
+  }
 }
 
 /* ------------------------------------------------------------
@@ -935,6 +1008,13 @@ el.restartBtn.addEventListener("click", () => {
 
 el.onlineBtn.addEventListener("click", showOnlineScreen);
 el.createBtn.addEventListener("click", createRoom);
+
+el.sizeButtons.querySelectorAll(".size-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    net.roomSize = Number(btn.dataset.size);
+    el.sizeButtons.querySelectorAll(".size-btn").forEach((b) => b.classList.toggle("size-btn--active", b === btn));
+  });
+});
 el.joinBtn.addEventListener("click", joinRoom);
 el.joinCode.addEventListener("keydown", (e) => {
   if (e.key === "Enter") joinRoom();

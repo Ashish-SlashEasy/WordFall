@@ -530,6 +530,53 @@ body {
 }
 
 /* ============================================================
+   Room size picker
+   ============================================================ */
+
+.size-row {
+  margin-bottom: 16px;
+}
+
+.size-row__label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.size-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.size-btn {
+  width: 44px;
+  height: 44px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--text-dim);
+  background: var(--bg-deep);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.size-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.size-btn--active {
+  color: #1a1030;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(255, 213, 74, 0.4);
+}
+
+/* ============================================================
    Online setup: name / room inputs
    ============================================================ */
 
@@ -592,10 +639,36 @@ body {
   text-shadow: 0 0 24px rgba(255, 213, 74, 0.5);
 }
 
-.room-code__waiting {
+/* Live roster of who's joined so far, shown while waiting for the room to fill */
+.lobby-roster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.lobby-roster__progress {
   font-size: 14px;
-  color: var(--text-dim);
+  color: var(--accent);
   animation: waiting-pulse 1.4s ease-in-out infinite;
+}
+
+.lobby-roster__names {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  max-width: 280px;
+}
+
+.lobby-roster__names li {
+  padding: 4px 12px;
+  font-size: 13px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text);
 }
 
 @keyframes waiting-pulse {
@@ -623,14 +696,16 @@ body {
 }
 
 /* ============================================================
-   Live opponent panel (online matches)
+   Live scoreboard: everyone else in the match (online matches)
    ============================================================ */
 
-.opponent {
+.scoreboard {
   position: absolute;
   top: 78px;
   right: 28px;
-  width: 190px;
+  width: 200px;
+  max-height: 60vh;
+  overflow-y: auto;
   padding: 10px 14px;
   background: rgba(23, 16, 40, 0.85);
   border: 1px solid var(--border);
@@ -638,125 +713,174 @@ body {
   z-index: 3;
 }
 
-.opponent--hidden { display: none; }
+.scoreboard--hidden { display: none; }
 
-.opponent__name {
+.scoreboard__title {
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.scoreboard__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scoreboard__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.scoreboard__name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   font-weight: bold;
-  letter-spacing: 2px;
   color: var(--wrong);
-  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.opponent__bar {
-  height: 10px;
+.scoreboard__bar {
+  flex: 1 1 100%;
+  height: 8px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 4px;
   background: #0d0a18;
   overflow: hidden;
-  margin-bottom: 6px;
 }
 
-.opponent__bar-fill {
+.scoreboard__bar-fill {
+  display: block;
   height: 100%;
   width: 100%;
   background: linear-gradient(90deg, #9d1f3c, var(--wrong));
   transition: width 0.3s ease-out;
 }
 
-.opponent__stats {
-  display: flex;
-  justify-content: space-between;
+.scoreboard__score {
   font-size: 12px;
-  color: var(--text-dim);
+  font-weight: bold;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
-.opponent__stats span:first-child {
-  color: var(--text);
-  font-weight: bold;
+/* Eliminated player: dimmed, struck through, bar reads empty */
+.scoreboard__row--out {
+  opacity: 0.45;
+}
+
+.scoreboard__row--out .scoreboard__name {
+  color: var(--text-dim);
+  text-decoration: line-through;
 }
 
 /* ============================================================
-   Versus results (online match end)
+   Spectate banner: shown after you're out, before the match ends
    ============================================================ */
 
-.versus--hidden { display: none; }
+.spectate-banner {
+  position: absolute;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 20px;
+  background: rgba(23, 16, 40, 0.9);
+  border: 1px solid var(--wrong);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--wrong);
+  text-shadow: 0 0 8px rgba(255, 77, 109, 0.4);
+  z-index: 6;
+  animation: waiting-pulse 1.6s ease-in-out infinite;
+}
 
-.versus__banner {
-  font-size: 24px;
+.spectate-banner--hidden { display: none; }
+
+/* ============================================================
+   Ranked match results (online match end)
+   ============================================================ */
+
+.match-results--hidden { display: none; }
+
+.match-results__banner {
+  font-size: 22px;
   font-weight: bold;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   color: var(--correct);
   text-shadow: 0 0 16px rgba(93, 255, 157, 0.5);
   margin-bottom: 16px;
 }
 
-.versus__banner--lost {
-  color: var(--wrong);
-  text-shadow: 0 0 16px rgba(255, 77, 109, 0.5);
+.match-results__banner--lost {
+  color: var(--text);
+  text-shadow: none;
 }
 
-.versus__columns {
+.match-results__list {
+  list-style: none;
+  width: min(360px, 82vw);
+  margin: 0 auto 18px;
   display: flex;
-  gap: 18px;
-  justify-content: center;
-  align-items: stretch;
-  margin-bottom: 18px;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.versus__col {
-  width: 150px;
-  padding: 14px 12px;
+.match-results__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
   background: var(--bg-deep);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
+  text-align: left;
 }
 
-.versus__col--winner {
+.match-results__row--winner {
   border-color: var(--accent);
-  box-shadow: 0 0 18px rgba(255, 213, 74, 0.3);
+  box-shadow: 0 0 14px rgba(255, 213, 74, 0.3);
 }
 
-.versus__vs {
-  align-self: center;
-  font-size: 18px;
+.match-results__row--me {
+  border-color: var(--correct);
+  box-shadow: 0 0 14px rgba(93, 255, 157, 0.25);
+}
+
+.match-results__rank {
+  width: 30px;
+  flex-shrink: 0;
   font-weight: bold;
   color: var(--text-dim);
-  letter-spacing: 2px;
+  text-align: center;
 }
 
-.versus__name {
-  font-size: 13px;
+.match-results__name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: bold;
-  letter-spacing: 1px;
-  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.versus__score {
-  font-size: 30px;
+.match-results__score {
   font-weight: bold;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
-  margin-bottom: 8px;
 }
 
-.versus__rows {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
+.match-results__meta {
+  flex-basis: 100%;
+  font-size: 11px;
   color: var(--text-dim);
-}
-
-.versus__rows b {
-  color: var(--text);
 }
 
 /* ============================================================
