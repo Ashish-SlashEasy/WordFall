@@ -150,13 +150,17 @@ function finishMatch(room) {
   if (survivor) orderedIds.push(survivor.id);
   for (let i = room.eliminationOrder.length - 1; i >= 0; i--) orderedIds.push(room.eliminationOrder[i]);
 
+  // A player who disconnects before ever sending a state update has no
+  // stats yet; default to a zeroed line so they still get ranked and
+  // recorded rather than silently disappearing from the results.
+  const EMPTY_STATS = { score: 0, wpm: 0, accuracy: 0, streak: 0, words: 0, hp: 0 };
   const results = orderedIds.map((id, i) => {
     const p = room.players.find((q) => q.id === id);
-    return { id: p.id, name: p.name, stats: p.stats, rank: i + 1, reason: p.eliminatedReason || null };
+    return { id: p.id, name: p.name, stats: p.stats || EMPTY_STATS, rank: i + 1, reason: p.eliminatedReason || null };
   });
 
   for (const r of results) {
-    if (r.stats) recordScore({ name: r.name, ...r.stats, mode: "online" });
+    recordScore({ name: r.name, ...r.stats, mode: "online" });
   }
 
   for (const p of room.players) push(p, "gameover", { results });
