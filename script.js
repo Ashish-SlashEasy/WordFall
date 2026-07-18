@@ -616,7 +616,7 @@ function showSoloResults(stats) {
 }
 
 /* ------------------------------------------------------------
-   Online 1v1 — talks to the relay in server.js.
+   Online multiplayer — talks to the relay in server.js.
    Transport: EventSource (server → us) + fetch POST (us → server).
    ------------------------------------------------------------ */
 
