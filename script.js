@@ -525,24 +525,18 @@ function wpmPercentile(wpm) {
   return last[1];
 }
 
-/** Always-encouraging message comparing the player's WPM to the record. */
+/** Short, always-motivating one-liner scaled to the player's WPM tier. */
 function wpmMessage(wpm) {
-  const pct = Math.round(wpmPercentile(wpm));
+  // Cap the displayed percentage below 100 — "faster than 100% of typists"
+  // (including yourself) doesn't make sense, even at the record WPM.
+  const pct = Math.min(99, Math.round(wpmPercentile(wpm)));
   const ofRecord = wpm / RECORD_WPM;
 
-  if (ofRecord < 0.15) {
-    return `Everyone starts somewhere — the ${RECORD_WPM} WPM world record was once a first try too. You're already faster than ${pct}% of typists!`;
-  }
-  if (ofRecord < 0.3) {
-    return `Solid! You're faster than ${pct}% of typists — the ${RECORD_WPM} WPM record holder better watch their back.`;
-  }
-  if (ofRecord < 0.5) {
-    return `Impressive — ${pct}% of typists are behind you. You're closing in on half the world record (${RECORD_WPM} WPM)!`;
-  }
-  if (ofRecord < 0.8) {
-    return `Elite territory: faster than ${pct}% of typists and over halfway to the ${RECORD_WPM} WPM world record!`;
-  }
-  return `Legendary! You're within reach of the ${RECORD_WPM} WPM world record and faster than ${pct}% of typists!`;
+  if (ofRecord < 0.15) return `🌱 Word one of many — already faster than ${pct}% of typists!`;
+  if (ofRecord < 0.3) return `⚡ Nice pace! Outtyping ${pct}% of typists already.`;
+  if (ofRecord < 0.5) return `🔥 Faster than ${pct}% of typists — momentum's building.`;
+  if (ofRecord < 0.8) return `🚀 Elite speed! Beating ${pct}% of typists worldwide.`;
+  return `👑 Legendary — faster than ${pct}% of typists alive.`;
 }
 
 /* ------------------------------------------------------------
@@ -886,7 +880,6 @@ function onMatchOver(msg) {
 
   el.soloResults.style.display = "none";
   el.matchResults.classList.remove("match-results--hidden");
-  el.wpmMessage.textContent = mine && mine.stats ? wpmMessage(mine.stats.wpm) : "";
   refreshEndLeaderboard(""); // match scores were recorded server-side
 
   el.endScreen.classList.add("overlay--visible");
