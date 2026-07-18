@@ -68,6 +68,7 @@ const el = {
   startBtn: document.getElementById("start-btn"),
   endScreen: document.getElementById("end-screen"),
   finalScore: document.getElementById("final-score"),
+  scoreTitle: document.getElementById("score-title"),
   newRecord: document.getElementById("new-record"),
   bestScoreRow: document.getElementById("best-score-row"),
   statBestScore: document.getElementById("stat-best-score"),
@@ -498,6 +499,28 @@ function spawnScoreFloat(word, points) {
 }
 
 /* ------------------------------------------------------------
+   Score-tier title — one-word rank shown under the final score
+   ------------------------------------------------------------ */
+
+const SCORE_TITLES = [
+  { min: 0, title: "NOVICE" },
+  { min: 150, title: "ROOKIE" },
+  { min: 400, title: "SKILLED" },
+  { min: 800, title: "EXPERT" },
+  { min: 1500, title: "MASTER" },
+  { min: 2500, title: "LEGEND" },
+];
+
+/** Highest tier whose threshold the score has reached. */
+function scoreTitle(score) {
+  let title = SCORE_TITLES[0].title;
+  for (const tier of SCORE_TITLES) {
+    if (score >= tier.min) title = tier.title;
+  }
+  return title;
+}
+
+/* ------------------------------------------------------------
    WPM encouragement
    ------------------------------------------------------------ */
 
@@ -592,6 +615,7 @@ function showSoloResults(stats) {
   el.soloResults.style.display = "";
 
   el.finalScore.textContent = stats.score;
+  el.scoreTitle.textContent = scoreTitle(stats.score);
   el.newRecord.classList.toggle("final-score__record--visible", isNewRecord);
   el.bestScoreRow.classList.toggle("stats__row--record", isNewRecord);
   el.statBestScore.textContent = best.score;

@@ -392,6 +392,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* One-word rank badge under the score, e.g. "ROOKIE" or "LEGEND" */
+.final-score__title {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(255, 213, 74, 0.4);
+}
+
 /* "NEW BEST!" badge, shown only when the all-time score record breaks */
 .final-score__record {
   display: none;
