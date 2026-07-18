@@ -610,7 +610,7 @@ function showSoloResults(stats) {
   const seconds = Math.floor(stats.elapsed % 60).toString().padStart(2, "0");
   const isNewRecord = stats.score > 0 && stats.score > state.bestAtStart;
 
-  el.endTitle.textContent = "💀 GAME OVER";
+  el.endTitle.innerHTML = '<span class="overlay__title-icon">💀</span> GAME OVER';
   el.matchResults.classList.add("match-results--hidden");
   el.soloResults.style.display = "";
 
@@ -892,7 +892,7 @@ function onMatchOver(msg) {
   const mine = results.find((r) => r.id === net.playerId);
   const iWon = !!mine && mine.rank === 1;
 
-  el.endTitle.textContent = "🏁 MATCH OVER";
+  el.endTitle.innerHTML = '<span class="overlay__title-icon">🏁</span> MATCH OVER';
   el.resultsBanner.textContent = iWon
     ? "🏆 YOU WIN!"
     : mine
