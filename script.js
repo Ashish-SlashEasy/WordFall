@@ -81,6 +81,7 @@ const el = {
   statTime: document.getElementById("stat-time"),
   wpmMessage: document.getElementById("wpm-message"),
   restartBtn: document.getElementById("restart-btn"),
+  menuBtn: document.getElementById("menu-btn"),
   // Online / multiplayer UI
   onlineBtn: document.getElementById("online-btn"),
   onlineHint: document.getElementById("online-hint"),
@@ -613,6 +614,7 @@ function showSoloResults(stats) {
   el.endTitle.innerHTML = '<span class="overlay__title-icon">💀</span> GAME OVER';
   el.matchResults.classList.add("match-results--hidden");
   el.soloResults.style.display = "";
+  el.menuBtn.style.display = ""; // TRY AGAIN alone can't reach Online Multiplayer
 
   el.finalScore.textContent = stats.score;
   el.scoreTitle.textContent = scoreTitle(stats.score);
@@ -893,6 +895,7 @@ function onMatchOver(msg) {
   const iWon = !!mine && mine.rank === 1;
 
   el.endTitle.innerHTML = '<span class="overlay__title-icon">🏁</span> MATCH OVER';
+  el.menuBtn.style.display = "none"; // restart-btn already reads "BACK TO MENU" here
   el.resultsBanner.textContent = iWon
     ? "🏆 YOU WIN!"
     : mine
@@ -1014,14 +1017,20 @@ el.startBtn.addEventListener("click", () => startGame());
 el.restartBtn.addEventListener("click", () => {
   if (net.mode === "online") {
     // No instant rematch — back to the menu to create/join a new room
-    leaveOnline();
-    el.endScreen.classList.remove("overlay--visible");
-    el.startScreen.classList.add("overlay--visible");
-    refreshStartLeaderboard();
+    returnToMenu();
     return;
   }
   startGame();
 });
+el.menuBtn.addEventListener("click", returnToMenu);
+
+/** Close out the current result screen and land back on mode-select. */
+function returnToMenu() {
+  leaveOnline();
+  el.endScreen.classList.remove("overlay--visible");
+  el.startScreen.classList.add("overlay--visible");
+  refreshStartLeaderboard();
+}
 
 el.onlineBtn.addEventListener("click", showOnlineScreen);
 el.createBtn.addEventListener("click", createRoom);
