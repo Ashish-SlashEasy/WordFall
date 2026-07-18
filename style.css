@@ -362,7 +362,7 @@ body {
 /* Pulsing zoom on the end-screen title icon (skull / checkered flag) */
 .overlay__title-icon {
   display: inline-block;
-  animation: title-icon-zoom 1.3s ease-in-out infinite;
+  animation: title-icon-zoom 2.6s ease-in-out infinite;
 }
 
 @keyframes title-icon-zoom {
