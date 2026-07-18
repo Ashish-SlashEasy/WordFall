@@ -397,7 +397,7 @@ body {
   margin-top: 4px;
   font-size: 15px;
   font-weight: bold;
-  letter-spacing: 4px;
+  letter-spacing: 1px;
   color: var(--accent);
   text-shadow: 0 0 10px rgba(255, 213, 74, 0.4);
 }

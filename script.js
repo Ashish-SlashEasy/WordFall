@@ -503,12 +503,12 @@ function spawnScoreFloat(word, points) {
    ------------------------------------------------------------ */
 
 const SCORE_TITLES = [
-  { min: 0, title: "NOVICE" },
-  { min: 150, title: "ROOKIE" },
-  { min: 400, title: "SKILLED" },
-  { min: 800, title: "EXPERT" },
-  { min: 1500, title: "MASTER" },
-  { min: 2500, title: "LEGEND" },
+  { min: 0, title: "🌱 Newbie" },
+  { min: 150, title: "⚔️ Challenger" },
+  { min: 400, title: "🔥 Warrior" },
+  { min: 800, title: "💎 Elite" },
+  { min: 1500, title: "👑 Champion" },
+  { min: 2500, title: "🏆 Mythic" },
 ];
 
 /** Highest tier whose threshold the score has reached. */
