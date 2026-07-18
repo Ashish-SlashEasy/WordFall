@@ -968,7 +968,7 @@ async function refreshStartLeaderboard() {
   try {
     const entries = await (await fetch("/leaderboard")).json();
     if (!entries.length) return;
-    renderLeaderboard(el.lbStartList, entries, 10);
+    renderLeaderboard(el.lbStartList, entries, entries.length); // show every ranked player
     el.lbStart.classList.remove("leaderboard--hidden");
   } catch {
     /* server unreachable — leave the panel hidden */

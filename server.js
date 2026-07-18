@@ -295,10 +295,10 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ---- Leaderboard ----
+  // ---- Leaderboard: full stored ranking (already capped at LEADERBOARD_CAP) ----
   if (req.method === "GET" && url.pathname === "/leaderboard") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify(leaderboard.slice(0, 10)));
+    return res.end(JSON.stringify(leaderboard));
   }
 
   // ---- JSON POST endpoints ----

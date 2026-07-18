@@ -952,6 +952,13 @@ body {
 
 .leaderboard__list--compact li { font-size: 13px; padding: 4px 8px; }
 
+/* Full ranked list on the start screen: every player, scrollable */
+.leaderboard__list--scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px; /* keep text clear of the scrollbar */
+}
+
 .leaderboard__placement {
   font-size: 14px;
   font-weight: bold;
